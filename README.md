@@ -91,6 +91,8 @@ You use it in the command line by feeding it the folder where all the DummyDLLs 
 
 You can then manually use the flatbuffer compiler `flatc` (that you can download [here](https://github.com/google/flatbuffers/releases)) to read the binary files with their schema and transform them into JSON or create bindings in your language of choice to read/write the data.
 
-The dicts in the manual version are rather annoying to read so i made a simple Python script to fix them called [fb_conv.py](https://github.com/djpadbit/Arknights-RE/blob/master/fb_conv.py) that converts the data and fixes it (you still need the [flatc](https://github.com/google/flatbuffers/releases) compiler). It takes the schema file and the binary file as an argument and creates a JSON file with the data.
+The dicts, nested arrays and JObjects in the manual version are rather annoying to read so i made a simple Python script to fix them called [fb_conv.py](https://github.com/djpadbit/Arknights-RE/blob/master/fb_conv.py) that converts the data and fixes it (you still need the [flatc](https://github.com/google/flatbuffers/releases) compiler). It takes the schema file and the binary file as an argument and creates a JSON file with the data.
 
 In regards to what is the schema for a binary file, the 6digit hex value after the name if it has one is a MD5 checksum that corresponds to the right class and are straight strings in the IL2Cpp stringlitterals that you can CTRL+F easily. You can find out the linked class in the function `Torappu.FlatBuffers.FlatLookupConverter$$_LoadRootTypeMD5`. You can also guess from the context like for example, a gacha table will probably have gacha in the name. Of course, you have to snoop around the classes in the DummyDLLs aswell.
+
+A nice tool i used to poke around the flatbuffers was [FlatCrawler](https://github.com/kwsch/FlatCrawler) by [kwsch](https://github.com/kwsch). You can manually try to guess the schema of a binary flatbuffer file.
