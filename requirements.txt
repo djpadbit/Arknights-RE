@@ -1,0 +1,9 @@
+# GS Api
+requests
+
+# Converter
+pycryptodome
+numpy
+
+# Flatbuffer fixer
+bson
