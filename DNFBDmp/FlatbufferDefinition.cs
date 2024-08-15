@@ -19,14 +19,15 @@ namespace DNFBDmp {
 		// Data within the file definition
 		public string? data;
 
-		public static Dictionary<TypeSig, FlatbufferDefinition> convTypes = new Dictionary<TypeSig, FlatbufferDefinition>();
+		public static Dictionary<string, FlatbufferDefinition> convTypes = new Dictionary<string, FlatbufferDefinition>();
 		public static HashSet<string> names = new HashSet<string>();
 
 		public static FlatbufferDefinition convert(TypeSig type, TypeResolver resolver) {
 			type = type.RemovePinnedAndModifiers();
-			string name = Utils.cleanupClassName(type.FullName);
-			FlatbufferDefinition fbDef;
-			if (convTypes.TryGetValue(type, out fbDef)) {
+			string fullName = type.FullName;
+			string name = Utils.cleanupClassName(fullName);
+			FlatbufferDefinition? fbDef;
+			if (convTypes.TryGetValue(fullName, out fbDef)) {
 				if (fbDef.name != name)
 					throw new Exception("Mismatched name for same typedef ??");
 			} else {
@@ -50,9 +51,10 @@ namespace DNFBDmp {
 			this.isRootType = false;
 
 			if (names.Contains(name))
-				throw new Exception("Duplicate class name");
+				throw new Exception($"Duplicate class name: '{name}' ({type.FullName})");
+			names.Add(name);
 
-			convTypes.Add(type, this);
+			convTypes.Add(type.FullName, this);
 		}
 
 		public string? getType() {
@@ -167,7 +169,7 @@ namespace DNFBDmp {
 			return false;
 		}
 
-		// Handles 
+		// Handles classes with custom serialisation
 		private bool handleCustomFBS(TypeSig sig, IList<TypeSig>? genericArgs, TypeResolver resolver, FBSBuilder builder) {
 			if (sig.FullName.StartsWith("System.Collections.Generic.Dictionary") || sig.FullName.StartsWith("Torappu.ListDict")) {
 				Console.WriteLine("Is custom dict");
@@ -182,8 +184,8 @@ namespace DNFBDmp {
 					throw new Exception("Couldn't get key or value type for dict");
 
 				builder.beginTable(this.name);
-				builder.addTableField("key", keyType);
-				builder.addTableField("value", valueType);
+				builder.addTableField("dict_key", keyType);
+				builder.addTableField("dict_value", valueType);
 				builder.endTable();
 
 				this.isArray = true;
@@ -213,32 +215,35 @@ namespace DNFBDmp {
 			FBSBuilder fbBuilder = new FBSBuilder();
 
 			TypeSig sig = this.type;
+			// We want to use the type for the getArraySig before modifying handling the generic types
+			// Because otherwise we won't get the generic arrays parameter
+			TypeSig? arraySig = getArraySig(sig);
 			// Generic args if we have some
 			IList<TypeSig>? genericArgs = null;
 			// We're a class by default
 			this.isRootType = true;
 
-			if (sig.IsGenericInstanceType) {
+			if (arraySig == null && sig.IsGenericInstanceType) {
 				GenericInstSig genericSig = sig.ToGenericInstSig();
 				Console.WriteLine($"Is generic {genericSig.GenericType.FullName}");
 				genericArgs = genericSig.GenericArguments;
 				sig = genericSig.GenericType;
 			}
 
-			if (handleCustomFBS(sig, genericArgs, resolver, fbBuilder)) {
-				// Schemas with custom serializing functions
-				Console.WriteLine("Was custom FBS");
-			} else if (sig.IsSZArray) {
-				// Single dim array with non trivial type
-				TypeSig arraySig = sig.Next;
+			if (arraySig != null) {
+				Console.WriteLine("Is array");
+				// Nested single dim array
 
 				string? type = getType(arraySig, resolver);
 				if (type == null)
 					throw new Exception("Can't find array type");
 
 				fbBuilder.beginTable(this.name);
-				fbBuilder.addTableField("value", type);
+				fbBuilder.addTableArrayField("arr_values", type);
 				fbBuilder.endTable();
+			} else if (handleCustomFBS(sig, genericArgs, resolver, fbBuilder)) {
+				// Schemas with custom serializing functions
+				Console.WriteLine("Was custom FBS");
 			} else if (sig.IsArray) {
 				// Multi-dim array, there is deadass only fucking one class using it,
 				// Fuck you for making me do this thing

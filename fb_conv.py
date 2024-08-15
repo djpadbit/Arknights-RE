@@ -10,7 +10,7 @@ schema = Path(cmd_args.schema).resolve()
 input = Path(cmd_args.bin).resolve()
 
 # Run flatc to generate the json from the binary file and the schema
-cmd = ["flatc","--defaults-json","--strict-json","--json","--raw-binary",str(schema),"--",str(input)]
+cmd = ["flatc","--no-warnings","--defaults-json","--strict-json","--json","--raw-binary",str(schema),"--",str(input)]
 print(f"Running: {' '.join(cmd)}")
 ret = subprocess.run(cmd)
 if ret.returncode != 0:
@@ -28,22 +28,34 @@ with open(out_file,'r',encoding="utf-8") as f:
 
 out_file.replace(out_file.with_suffix(".old.json"))
 
-dict_keys = set(["key","value"])
+dict_keys = set(["dict_key","dict_value"])
 jobj_keys = set(["jobj_bson"])
+arr_keys = set(["arr_values"])
 
-# Recursive function to fix the dicts
+# Recursive function to fix the dicts, nested single dim array and jobjects
 def fix_dict(dat):
 	if isinstance(dat, list):
-		is_dict = True
+		is_dict = True if len(dat) > 0 else False
+		is_arr = True if len(dat) > 0 else False
+
 		for elem in dat:
 			if not (isinstance(elem,dict) and elem.keys() == dict_keys):
 				is_dict = False
 				break
+
+		for elem in dat:
+			if not (isinstance(elem,dict) and elem.keys() == arr_keys):
+				is_arr = False
+				break
+
 		if is_dict:
-			return {elem["key"]:fix_dict(elem["value"]) for elem in dat}
+			return {elem["dict_key"]:fix_dict(elem["dict_value"]) for elem in dat}
+		elif is_arr:
+			return [fix_dict(elem["arr_values"]) for elem in dat]
 
 		for i in range(len(dat)):
 			dat[i] = fix_dict(dat[i])
+
 		return dat
 	elif isinstance(dat, dict):
 		if dat.keys() == jobj_keys:
