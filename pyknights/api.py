@@ -12,7 +12,7 @@ if GLOBAL_SSL_VERIFY is False:
 	import urllib3
 	urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-class AiriSDKAPI():
+class AiriSDKAPI:
 	def __init__(self, userAgent, baseURL, platform, channel):
 		self.session = requests.Session()
 		self.session.proxies = GLOBAL_PROXIES
@@ -116,7 +116,7 @@ class AiriSDKAPI():
 		print(f"Token: {self.token}")
 		print(f"UID: {self.uid}")
 
-class U8SDKAPI():
+class U8SDKAPI:
 	# Full credit to https://github.com/Tao0Lu/Arknights_Checkin for the key
 	HAMC_KEY = b"91240f70c09a08a6bc72af1a5c8d4670"
 
@@ -175,7 +175,7 @@ class U8SDKAPI():
 		print(f"U8 Token: {self.token}")
 		print(f"UID: {self.uid}")
 
-class ArknightsAPI():
+class ArknightsAPI:
 	PASSPORT_BASE = "https://passport.arknights.global"
 	NETCONFIG_URL = "https://ak-conf.arknights.global/config/prod/official/network_config"
 	UNITY_VERSION = "2017.4.39f1"
@@ -349,7 +349,7 @@ class ArknightsAPI():
 		del data["playerDataDelta"]
 
 	def syncData(self):
-		data = self._doGSPost("/account/syncData",{"platform":1})
+		data = self._doGSPost("/account/syncData",{"platform":ArknightsAPI.PLATFORM_ID})
 		res = self._checkResult(data)
 		if res != 0:
 			raise RuntimeError(f"Data Sync Failed: Result is {res}")

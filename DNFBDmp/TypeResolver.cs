@@ -3,7 +3,7 @@
 namespace DNFBDmp {
 	// This class is just a manual resolver by iterating through the modules
 	// and finding the right definition.
-	// Maybe there was a way to do it with the module context int dnlib
+	// Maybe there was a way to do it with the module context in dnlib
 	// but i couldn't get it to work, i might be dumb.
 	public class TypeResolver {
 		private List<ModuleDef> modules;
