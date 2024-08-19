@@ -13,7 +13,8 @@ This is my take on some RE of Arknights, this is rather surface level, don't exp
 - [Extract and decrypt assets](#extraction-of-assets)
 - [Getting & reversing the code](#reversing-the-code)
 - [Decrypting assets](#decryption-of-assets)
-Other random stufff
+
+### Random stuff
 - [Logging telemetry](#logging-telemetry)
 
 > [!TIP]
