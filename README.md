@@ -13,6 +13,8 @@ This is my take on some RE of Arknights, this is rather surface level, don't exp
 - [Extract and decrypt assets](#extraction-of-assets)
 - [Getting & reversing the code](#reversing-the-code)
 - [Decrypting assets](#decryption-of-assets)
+Other random stufff
+- [Logging telemetry](#logging-telemetry)
 
 > [!TIP]
 > The requirements for all the Python scripts and can be installed with `python -m pip install -r requirements.txt`.
@@ -96,3 +98,11 @@ The dicts, nested arrays and JObjects in the manual version are rather annoying 
 In regards to what is the schema for a binary file, the 6digit hex value after the name if it has one is a MD5 checksum that corresponds to the right class and are straight strings in the IL2Cpp stringlitterals that you can CTRL+F easily. You can find out the linked class in the function `Torappu.FlatBuffers.FlatLookupConverter$$_LoadRootTypeMD5`. You can also guess from the context like for example, a gacha table will probably have gacha in the name. Of course, you have to snoop around the classes in the DummyDLLs aswell.
 
 A nice tool i used to poke around the flatbuffers was [FlatCrawler](https://github.com/kwsch/FlatCrawler) by [kwsch](https://github.com/kwsch). You can manually try to guess the schema of a binary flatbuffer file.
+
+# Logging telemetry
+
+Arknights now sends some logs to their servers for more telemetry, and i thought I'd be interesting to look at what they were sending. It uses Alibaba Cloud's library called [Simple Log Service](https://www.alibabacloud.com/help/en/sls/). It specifically uses the [Android SDK](https://github.com/aliyun/aliyun-log-android-sdk) version of it, which is based on the [C SDK](https://github.com/aliyun/aliyun-log-c-sdk) version.
+
+It's pretty simple and uses only one Protocol Buffer define in the [docs](https://www.alibabacloud.com/help/en/sls/developer-reference/data-encoding) (mirrored in the repo [here](https://github.com/djpadbit/Arknights-RE/blob/master/mitm/sls.proto)). But it compresses the data before sending it, with LZ4 or ZSTD.
+
+I made a very simple mitmproxy addon that adds a Content View for the compressed protocol buffer of SLS in [mitm/slsview.py](https://github.com/djpadbit/Arknights-RE/blob/master/mitm/slsview.py). To use it you need to have the LZ4 package installed in mitmproxy's venv. You can do it by [installing mitmproxy through pipx](https://docs.mitmproxy.org/stable/overview-installation/#installation-from-the-python-package-index-pypi) and then injecting the pip dependency (only `lz4`, zstd is not implemented as it's not used for Arknights) as explained in the docs of mitmproxy. This Content View returns the message decoded converted to JSON so you can easily peek at what's inside.
