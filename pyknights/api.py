@@ -583,3 +583,11 @@ class ArknightsAPI:
 
 	def getPlayerData(self):
 		return self.playerData
+
+	# Used for battle data
+	def getLoginTs(self):
+		if "pushFlags" not in self.playerData:
+			raise RuntimeError("pushFlags not in playerData")
+		if "status" not in self.playerData["pushFlags"]:
+			raise RuntimeError("status not in pushFlags in playerData")
+		return self.playerData["pushFlags"]["status"]

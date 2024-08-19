@@ -10,6 +10,7 @@ parser.add_argument("-as", "--cryptasign", help="Signed Cryptic A", action="stor
 parser.add_argument("-a", "--crypta", help="Cryptic A", action="store_true")
 parser.add_argument("-b", "--cryptb", help="Cryptic B", action="store_true")
 parser.add_argument("-bd", "--battledat", help="BattleData", action="store_true")
+parser.add_argument("-lt", "--logtime", help="BattleData log-in timestamp", type=int)
 parser.add_argument("-bs", "--battlesig", help="BattleSignature", action="store_true")
 parser.add_argument("-o", "--output", help="Output file/folder or pipe", type=str)
 cmd_args = parser.parse_args()
@@ -24,11 +25,13 @@ elif cmd_args.crypta:
 elif cmd_args.cryptb:
 	conv = converter.CrypticConverterB()
 elif cmd_args.battledat:
-	conv = converter.BattleDataConverter()
+	if not cmd_args.logtime:
+		parser.error("--battledat requires --logtime.")
+	conv = converter.BattleDataConverter(log_time=cmd_args.logtime)
 elif cmd_args.battlesig:
 	conv = converter.FinishBattleSignatureConverter()
 else:
-	print("Please give a converter to use")
+	parser.error("You must specify a converter type")
 	exit()
 
 stdin = len(cmd_args.file) == 1 and cmd_args.file[0] == "-"
@@ -38,7 +41,8 @@ stdout = arg_stdout if cmd_args.output else True if stdin else arg_stdout
 for file in cmd_args.file:
 	if stdin:
 		fdat = sys.stdin.buffer.read()
-		out_file = Path(cmd_args.output).resolve()
+		if not stdout:
+			out_file = Path(cmd_args.output).resolve()
 	else:
 		file = Path(file).resolve()
 		out_file = file.with_suffix(".enc" if cmd_args.encrypt else ".dec")

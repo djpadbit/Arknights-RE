@@ -37,7 +37,7 @@ with open("data1.json",'w',encoding="utf-8") as f:
 
 origPay = gamedat['status']['payDiamond']
 origFree = gamedat['status']['freeDiamond']
-print(f"Logged in as {gamedat['status']['nickName']}#{gamedat['status']['nickNumber']} ({gamedat['status']['uid']})")
+print(f"Logged in as {gamedat['status']['nickName']}#{gamedat['status']['nickNumber']} ({gamedat['status']['uid']}) at {api.getLoginTs()}")
 print(f"Level {gamedat['status']['level']} with {gamedat['status']['exp']} exp")
 print(f"Sanity {gamedat['status']['ap']}/{gamedat['status']['maxAp']}")
 print(f"{origPay+origFree} Originite Prime ({origFree} Free, {origPay} Paid)")
