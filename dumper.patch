@@ -689,14 +689,14 @@ index 12bc5b6..37e174c 100644
  
  #endif //ZYGISK_IL2CPPDUMPER_GAME_H
 diff --git a/module/src/main/cpp/hack.cpp b/module/src/main/cpp/hack.cpp
-index 8bc71c3..5bed1fa 100644
+index 8bc71c3..ed9e814 100644
 --- a/module/src/main/cpp/hack.cpp
 +++ b/module/src/main/cpp/hack.cpp
 @@ -1,11 +1,14 @@
  //
  // Created by Perfare on 2020/7/4.
  //
-+// Modified by DJPadbit on 2024/08/02 
++// Modified by DJPadbit on 2024/08/02
 +//
  
  #include "hack.h"
@@ -715,13 +715,12 @@ index 8bc71c3..5bed1fa 100644
  
  unsigned long get_module_base(const char * module_name) {
      FILE * fp;
-@@ -42,11 +46,129 @@ unsigned long get_module_base(const char * module_name) {
+@@ -42,23 +46,221 @@ unsigned long get_module_base(const char * module_name) {
      return addr;
  }
  
 -void * hack_thread(const char * game_data_dir) {
-+void hack_lib(const char * game_data_dir) {
-+    std::string modName = "libil2cpp.so";
++void hack_lib(const char * game_data_dir, std::string modName) {
 +    std::string outPathRo = std::string(game_data_dir).append("/files/ro_").append(modName);
 +    std::string outPathRw = std::string(game_data_dir).append("/files/").append(modName);
 +
@@ -731,7 +730,7 @@ index 8bc71c3..5bed1fa 100644
 +        LOGI("hack_lib: couldn't open maps");
 +        return;
 +    }
-+    LOGI("hack_lib: map open");
++    LOGI("hack_lib: map open, looking for '%s'", modName.c_str());
 +
 +    struct segment {
 +        unsigned long start_addr;
@@ -848,12 +847,19 @@ index 8bc71c3..5bed1fa 100644
      auto outPath = std::string(game_data_dir).append("/files/global-metadata.dat");
      std::ofstream outfile(outPath, std::ios::binary | std::ios::out);
      if (outfile.is_open()) {
-@@ -54,11 +176,88 @@ void * hack_thread(const char * game_data_dir) {
+         // deref once to get correct pointer to GM
          const char * variable_data = reinterpret_cast < char * > (hack_addr);
-         int difinitionOffset_size = *(reinterpret_cast < const int * > (variable_data + 0x100));
-         int definitionsCount_size = *(reinterpret_cast < const int * > (variable_data + 0x104));
-+        LOGI("hack_thread: defOffsetSize %x defCountSize %x", difinitionOffset_size, definitionsCount_size);
-         outfile.write(variable_data, difinitionOffset_size + definitionsCount_size);
+-        int difinitionOffset_size = *(reinterpret_cast < const int * > (variable_data + 0x100));
+-        int definitionsCount_size = *(reinterpret_cast < const int * > (variable_data + 0x104));
+-        outfile.write(variable_data, difinitionOffset_size + definitionsCount_size);
++        int definitionOffset_size = *(reinterpret_cast < const int * > (variable_data + 0x108));
++        int definitionsCount_size = *(reinterpret_cast < const int * > (variable_data + 0x10C));
++        if (definitionsCount_size < 10) {
++            definitionOffset_size = *(reinterpret_cast < const int * > (variable_data + 0x100));
++            definitionsCount_size = *(reinterpret_cast < const int * > (variable_data + 0x104));
++        }
++        LOGI("hack_thread: defOffsetSize %x defCountSize %x", definitionOffset_size, definitionsCount_size);
++        outfile.write(variable_data, definitionOffset_size + definitionsCount_size);
          outfile.close();
      }
  }
@@ -890,11 +896,10 @@ index 8bc71c3..5bed1fa 100644
 +
 +System_String_o* (*old_getChatMask)(Torappu_PlayerData_o*, const void*) = nullptr;
 +
-+std::string& getStringFromNet(System_String_o* in_string) {
++std::string& getStringFromNet(System_String_o* in_string, std::string& out_string) {
 +    int32_t size = in_string->fields.length;
 +    uint16_t *start = &in_string->fields.start_char;
 +
-+    std::string out_string;
 +    out_string.resize(size);
 +    char *st = out_string.data();
 +    for (int i=0;i<size;i++)
@@ -912,7 +917,8 @@ index 8bc71c3..5bed1fa 100644
 +    System_String_o* ret = old_getChatMask(__this, method);
 +    LOGI("getChatMask_hook: Called old func, ret %lx", (unsigned long)ret);
 +    if (ret != nullptr) {
-+        std::string chatmask = getStringFromNet(ret);
++        std::string chatmask;
++        getStringFromNet(ret, chatmask);
 +        LOGI("getChatMask_hook: data => '%s'", chatmask.c_str());
 +    }
 +    return ret;
@@ -937,11 +943,12 @@ index 8bc71c3..5bed1fa 100644
  void hack_start(const char *game_data_dir) {
      bool load = false;
      for (int i = 0; i < 10; i++) {
-@@ -68,6 +267,8 @@ void hack_start(const char *game_data_dir) {
+@@ -68,6 +270,9 @@ void hack_start(const char *game_data_dir) {
              il2cpp_api_init(handle);
              il2cpp_dump(game_data_dir);
              hack_thread(game_data_dir);
-+            hack_lib(game_data_dir);
++            hack_lib(game_data_dir, "libil2cpp.so");
++            hack_lib(game_data_dir, "libanort.so");
 +            hack_chatmask();
              break;
          } else {

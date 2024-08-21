@@ -53,11 +53,30 @@ Some assets, for example most of the tables and all the lua files are encrypted 
 
 # Reversing the code
 
-### I won't help you to do any of this, i'm just documenting how i've done it. 
+> [!WARNING]
+> I won't help you to do any of this, i'm just documenting how i've done it.
 
-I used a modified [Fork of Zygisk-Il2CppDumper by 000ylop](https://github.com/000ylop/Zygisk-Il2CppDumper) (my patch is in [dumper.patch](https://github.com/djpadbit/Arknights-RE/blob/master/dumper.patch), it is meant for Arknights 24.2.21) to get the decrypted global-metadata.dat file. I had to readd the header to it and afterwards i could use [IL2CppDumper](https://github.com/Perfare/Il2CppDumper) to generate all the DummyDLLs and the data to make the IDA Python script. The IL2CPP library i used in IDA was the one dumped with my modified Zygisk IL2Cpp Dumper as it was more complete. It also gave the address for the Code Registration and Metadata Registration in the logs which was needed. (0xA0724A0 and 0xA072510 respectively for 24.2.21). A good reference for all things IL2Cpp reversing is [il2cppdumper.com](https://il2cppdumper.com/).
+> [!NOTE]
+> The addresses, values and the patch are all for Arknights 24.2.21
+
+## How I got the global-metadata.dat and the dumped libil2cpp.so
+
+I used a modified [Fork of Zygisk-Il2CppDumper by 000ylop](https://github.com/000ylop/Zygisk-Il2CppDumper) (my patch is in [dumper.patch](https://github.com/djpadbit/Arknights-RE/blob/master/dumper.patch)) to get the decrypted global-metadata.dat file. I had to readd the header to it and afterwards i could use [IL2CppDumper](https://github.com/Perfare/Il2CppDumper) to generate all the DummyDLLs and the data to make the IDA Python script. The IL2CPP library i used in IDA was the one dumped with my modified Zygisk IL2Cpp Dumper as it was more complete. It also gave the address for the Code Registration and Metadata Registration in the logs which was needed. (0xA0724A0 and 0xA072510 respectively). A good reference for all things IL2Cpp reversing is [il2cppdumper.com](https://il2cppdumper.com/).
 
 You could probably do all of the work of the Zygisk dumper using [Frida](https://frida.re/) in an emulator but i only heard of it after i had done most of the work on a real phone using the dumper.
+
+## Decrypting the global-metadata.dat without dumping it
+
+#### TL;DR: Not done yet but very feasible
+
+After the fact, I looked into the encryption of the global-metadata.dat file which was interesting for sure. Inside libil2cpp, at 0x2343904 is the function to load the global-metadata.dat file the the part that loads it and decrypts it in inside the function at 0x2341308 in the mmap call at 0x22E0710 which leads to 0xA861818 through a pointer. This one calls a function at 0x137220 in another library: `libanort.so` and finally we reach the real modifed mmap at 0x136770 in the other library. I managed to find this out using [Frida](https://frida.re/) on my real device as it always crashed on the emulator.
+
+From there, it decompiles not too bad, so I fixed the decompiled code and put it into a standalone app. I get the majority of the file decrypted but a single 0x4000 bytes long chunk at offset 0x1000, which corresponds to the most complex part of the decrypter, doesn't decrypt properly. Honestly I really don't want to dive into the decompiled horrible mess so I'll shelf the problem for later. I won't put the code here as it is really nasty, being straight out of IDA's decompiler but you can redo it pretty easily.
+
+Some interesting things:
+2 functions called are obfuscated and IDA doesn't dissasemble it properly: 0xF88D4 and 0xF9740, their real body can be found by scrolling down a little bit but they do weird stuff with threads that i don't get. I've also had a big problem getting debuggers to run, I've tried gdb on device but it can't set breakpoints, gdbserver just doesn't work, lldb works even less and Frida fails to hook the important functions or it just makes it crash. So I can't poke around in-situ but removing the functions calls don't seem to affect the functionallity of the decrypter and the game still works. So I guess they're not essential ?
+
+## Reversing
 
 Afterwards it's relatively straight forwards, just do as any other IL2CPP game. I recommend using [dnSpy](https://github.com/dnSpyEx/dnSpy) to find interesting functions inside the DummyDLLs and then use IDA or Ghidra to look at the code.
 
@@ -73,7 +92,7 @@ In the assets, some files are encrypted, there are multiple custom encryption sc
 
 The CLI of the converter library is the script [decrypt.py](https://github.com/djpadbit/Arknights-RE/blob/master/decrypt.py), it's use is fairly straight forwards so i won't detail it here.
 
-Of course non of the `.ab` files are encrypted, when i reference one of them, i'm talking about files inside of them, you have to [extract](#extraction-of-assets) them.
+Of course none of the `.ab` files are encrypted, when i reference one of them, i'm talking about files inside of them, you have to [extract](#extraction-of-assets) them.
 
 The converter used for asset types that I remember are:
 |Asset type|Location|Converter Type|Data Type Inside|
