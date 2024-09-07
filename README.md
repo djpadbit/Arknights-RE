@@ -23,6 +23,8 @@ This is my take on some RE of Arknights, this is rather surface level, don't exp
 # Other resources
 
 There are other good ressources on this, but i wanted to take on the challenge myself so here we are. Please tell me if there are some more.
+- [ArkPRTS](https://github.com/thesadru/arkprts) by [thesadru](https://github.com/thesadru) (and the associated gamedata dump [ArknightsGamedata](https://github.com/ArknightsAssets/ArknightsGamedata))
+- [OpenArknightsFBS](https://github.com/MooncellWiki/OpenArknightsFBS) by [MooncellWiki](https://github.com/MooncellWiki)
 - [Rhine-DFramwork](https://github.com/Rhine-Department-0xf/Rhine-DFramwork) by [Rhine-Department-0xf](https://github.com/Rhine-Department-0xf)
 - [Arknights_Checkin](https://github.com/Tao0Lu/Arknights_Checkin) by [Tao0Lu](https://github.com/Tao0Lu)
 - [Arknights-Lua-Decrypter](https://github.com/n0k0m3/Arknights-Lua-Decrypter) by [n0k0m3](https://github.com/n0k0m3) (even if the keys are outdated)
