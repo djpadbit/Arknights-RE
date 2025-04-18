@@ -9,8 +9,8 @@ This is my take on some RE of Arknights, this is rather surface level, don't exp
 
 ### Table of contents
 - [Other Resources](#other-resources)
-- [Man-In-The-Middle](#man-in-the-middle)
 - [GameServer Python API](#gs-api)
+- [Man-In-The-Middle](#man-in-the-middle)
 - [Extract and decrypt assets](#extraction-of-assets)
 - [Getting & reversing the code](#reversing-the-code)
 - [Decrypting assets](#decryption-of-assets)
