@@ -19,17 +19,20 @@ recruitmentDuration = 540*60 # 9h
 # Constants
 recruitmentTagsSpecial = [11,14]
 
+# Load the login details
 try:
 	with open("creds.json",'r',encoding="utf-8") as f:
 		creds = json.load(f)
-	if "userAgent" not in creds or "uid" not in creds or "deviceId" not in creds or "token" not in creds:
+	if "UID" not in creds or "Token" not in creds or "deviceId" not in creds or "Account" not in creds:
 		raise ValueError()
 except:
 	print("No login data, check creds.json, you might need to run create_login.py")
 	exit()
 
-api = ArknightsAPI(creds["userAgent"])
-api.login(creds["uid"],creds["token"],creds["deviceId"])
+# Create the API and login
+api = ArknightsAPI(creds["deviceId"], creds["userAgent"])
+api.login(creds["UID"],creds["Token"],creds["Account"])
+
 print("Syncing data")
 gamedat = api.syncData()
 with open("data1.json",'w',encoding="utf-8") as f:
@@ -220,6 +223,12 @@ if annihilationStage and "EXTERMINATION_AGENT" in gamedat["consumable"]:
 		card = cards.pop()
 		print(f"Doing PRTS Proxy Annihilation with ({card[0]},ts:{card[1]}), {gamedat['campaignsV2']['campaignCurrentFee']}/{gamedat['campaignsV2']['campaignTotalFee']}")
 		print(api.doBattleSweep(card[0],"EXTERMINATION_AGENT",annihilationStage))
+
+# Do Rotations, pretty easy since there is a batch feature
+print("Rotating Ops in the base")
+print(api.doBatchRotation())
+print("Resting Ops in the base")
+print(api.doBatchRest())
 
 for i in ["MAIN","WEEKLY","DAILY"]:
 	print(f"Confirming {i} missions")

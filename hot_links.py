@@ -4,7 +4,7 @@ import json
 # Specify to get a specific version's hot update assets
 asset_version = None
 
-api = ArknightsAPI("Dalvik/2.1.0 (Linux; U; Android 7.1.2; SM-G965N Build/QP1A.190711.020)")
+api = ArknightsAPI()
 # We piggy-back of the api's request session
 
 resp = api.session.get(api.getHotUpdateListURL(asset_version))

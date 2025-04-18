@@ -1,4 +1,4 @@
-import requests,json,hmac
+import requests,json,hmac,uuid,hashlib
 import collections.abc
 from datetime import datetime,timezone
 
@@ -12,109 +12,131 @@ if GLOBAL_SSL_VERIFY is False:
 	import urllib3
 	urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# Dict to JSON without spaces
+def minJson(data,**kwargs):
+	return json.dumps(data,separators=(',',':'),**kwargs)
+
 class AiriSDKAPI:
-	def __init__(self, userAgent, baseURL, platform, channel):
+	YOSTAR_API_BASE = "https://en-sdk-api.yostarplat.com/"
+	YOSTAR_SDK_VERSION = "4.10.0"
+	MD5_KEY = b"886c085e4a8d30a703367b120dd8353948405ec2"
+	USER_AGENT = "okhttp/3.12.13"
+
+	def __init__(self, deviceId, platform, channel, pid, language, versionCode):
 		self.session = requests.Session()
 		self.session.proxies = GLOBAL_PROXIES
 		self.session.verify = GLOBAL_SSL_VERIFY
-		self.session.headers["User-Agent"] = userAgent
-		self.baseURL = baseURL
+		self.session.headers["Accept-Encoding"] = "gzip"
+		self.session.headers["User-Agent"] = AiriSDKAPI.USER_AGENT
+		self.baseURL = AiriSDKAPI.YOSTAR_API_BASE
+		self.deviceModel = "Emulator"
 		self.platform = platform
 		self.channel = channel
-		self._fetchStatusCodes()
-		self.accessToken = None
-		self.loginTimestamp = None
-		self.yostarAccount = None
-		self.yostarToken = None
-		self.yostarUid = None
+		self.versionCode = versionCode
+		self.language = language
+		self.pid = pid
+		self.deviceId = deviceId
 		self.token = None
 		self.uid = None
+		self.oldUid = None
 
-	def _fetchStatusCodes(self):
-		postData = {"all":1,"codestr":0}
-		resp = self.session.post(self.baseURL+"/app/getCode",data=postData)
-		if resp.status_code != 200:
-			raise RuntimeError(f"Staus fetch failed: POST status is {resp.status_code}")
-		data = resp.json()
-		if "data" not in data or "result" not in data or data["result"] != 0:
-			raise ValueError("Staus fetch failed: No data")
-		self.statusCodes = {}
-		for stat in data["data"]:
-			if "codemessage" not in stat or "codestr" not in stat:
-				continue
-			self.statusCodes[int(stat["codestr"])] = stat["codemessage"]
+	def setDeviceModel(self, deviceModel):
+		self.deviceModel = deviceModel
+
+	def _makeAuthHeader(self, pid, uid, token, padding):
+		head = {}
+		head["PID"] = pid
+		head["Channel"] = self.channel
+		head["Platform"] = self.platform
+		head["Version"] = AiriSDKAPI.YOSTAR_SDK_VERSION
+		head["GVersionNo"] = self.versionCode
+		head["GBuildNo"] = ""
+		head["Lang"] = self.language
+		head["DeviceID"] = self.deviceId
+		head["DeviceModel"] = self.deviceModel
+		head["UID"] = uid
+		head["Token"] = token
+		head["Time"] = ArknightsAPI.getCurrentTs()
+
+		headStr = minJson(head).encode("utf-8")
+		if isinstance(padding, str):
+			padding = padding.encode("utf-8")
+		md5 = hashlib.md5(headStr + padding + AiriSDKAPI.MD5_KEY).hexdigest().upper()
+
+		return minJson({"Head": head, "Sign": md5})
+
+	def _doPost(self, endpoint, data):
+		data = minJson(data,allow_nan=False).encode("utf-8")
+		hdrs = {"Content-Type": "application/json", "Authorization": self._makeAuthHeader(self.pid, self.uid or "", self.token or "", data)}
+		return self.session.post(self.baseURL + endpoint, data, headers=hdrs)
 
 	def _checkResult(self, data):
-		if "result" not in data:
-			return "No Result in data"
-		res = data["result"]
-		del data["result"]
-		if res == 0:
-			return None
-		if res not in self.statusCodes:
-			res = -1
-		return self.statusCodes[res] + f" ({res})"
+		if "Code" not in data or "Msg" not in data or "Data" not in data:
+			return None, "No Code,Msg or Data in data"
+		code = data["Code"]
+		msg = data["Msg"]
 
-	def login(self, uid, deviceId, token):
-		postData = {"platform":self.platform,"uid":str(uid),"deviceId":deviceId,"token":token}
-		resp = self.session.post(self.baseURL+"/user/login",data=postData)
+		if code == 200:
+			return data["Data"],None
+
+		return data["Data"],msg + f" ({code})"
+
+	# Long login only, didn't implement quick login
+	# Quick login uses the UID & Token in the Auth header
+	def login(self, uid, token, account):
+		postData = {
+			"CheckAccount": 0,
+			"Geetest": {"CaptchaID": None,"CaptchaOutput": None,"GenTime": None,"LotNumber": None,"PassToken": None},
+			"OpenID": uid,
+			"Secret": "",
+			"Token": token,
+			"Type": "yostar",
+			"UserName": account
+		}
+
+		resp = self._doPost("/user/login",postData)
 		if resp.status_code != 200:
 			raise RuntimeError(f"AiriSDK Login failed: POST status is {resp.status_code}")
-		data = resp.json()
-		res = self._checkResult(data)
+		data,res = self._checkResult(resp.json())
 		if res:
 			raise RuntimeError(f"AiriSDK Login failed: {res}")
-		if "accessToken" not in data or "current_timestamp_ms" not in data:
-			raise ValueError("AiriSDK Login failed: No accessToken or timestamp")
-		self.accessToken = data["accessToken"]
-		self.loginTimestamp = data["current_timestamp_ms"]
-		print(f"Access Token: {self.accessToken}")
-		print(f"Login timestamp: {self.loginTimestamp}")
+		if "UserInfo" not in data or "Token" not in data["UserInfo"] or "ID" not in data["UserInfo"] or "UID2" not in data["UserInfo"]:
+			raise ValueError("AiriSDK Login failed: No Token or ID or UID2")
+
+		self.token = data["UserInfo"]["Token"]
+		self.uid = data["UserInfo"]["ID"]
+		self.oldUid = data["UserInfo"]["UID2"]
+
+		print(f"AiriSDK Token: {self.token}")
+		print(f"AiriSDK UID: {self.uid}")
+		print(f"AiriSDK Old UID: {self.oldUid}")
 
 	def yostarAuthRequest(self, email):
-		postData = {"platform":self.platform,"account":email}
-		resp = self.session.post(self.baseURL+"/account/yostar_auth_request",data=postData)
+		postData = {"Account":email, "Randstr": "", "Ticket": ""}
+		resp = self._doPost("/yostar/send-code",postData)
 		if resp.status_code != 200:
 			raise RuntimeError(f"AiriSDK Yostar Auth Request failed: POST status is {resp.status_code}")
-		data = resp.json()
-		res = self._checkResult(data)
+		data,res = self._checkResult(resp.json())
 		if res:
 			raise RuntimeError(f"AiriSDK Yostar Auth Request failed: {res}")
 
-	def yostarAuth(self, email, code):
-		postData = {"platform":self.platform,"account":email,"code":str(code)}
-		resp = self.session.post(self.baseURL+"/account/yostar_auth_submit",data=postData)
+		return data
+
+	def yostarGetAuth(self, email, code):
+		postData = {"Account": email, "Code": str(code)}
+		resp = self._doPost("/yostar/get-auth",postData)
 		if resp.status_code != 200:
 			raise RuntimeError(f"AiriSDK Yostar Auth failed: POST status is {resp.status_code}")
-		data = resp.json()
-		res = self._checkResult(data)
+		data,res = self._checkResult(resp.json())
 		if res:
 			raise RuntimeError(f"AiriSDK Yostar Auth failed: {res}")
-		if "yostar_account" not in data or "yostar_token" not in data or "yostar_uid" not in data:
+		if "Account" not in data or "Token" not in data or "UID" not in data:
 			raise ValueError("AiriSDK Yostar Auth failed: No account or token or uid")
-		self.yostarAccount = data["yostar_account"]
-		self.yostarToken = data["yostar_token"]
-		self.yostarUid = data["yostar_uid"]
-		print(f"Yostar Account: {self.yostarAccount}")
-		print(f"Yostar Token: {self.yostarToken}")
-		print(f"Yostar UID: {self.yostarUid}")
 
-	def yostarCreateLogin(self, token, deviceId, uid, email, createNew=False):
-		postData = {"yostar_token":token,"deviceId":deviceId,"channelId":self.channel,"yostar_uid":uid,
-					"createNew":str(int(createNew)),"yostar_username":email}
-		resp = self.session.post(self.baseURL+"/user/yostar_createlogin",data=postData)
-		if resp.status_code != 200:
-			raise RuntimeError(f"AiriSDK Yostar Create Login failed: POST status is {resp.status_code}")
-		data = resp.json()
-		res = self._checkResult(data)
-		if res:
-			raise RuntimeError(f"AiriSDK Yostar Create Login failed: {res}")
-		if "token" not in data or "uid" not in data or "isNew" not in data:
-			raise ValueError("AiriSDK Yostar Auth failed: No token or uid or isNew")
-		self.token = data["token"]
-		self.uid = data["uid"]
-		print(f"Token: {self.token}")
-		print(f"UID: {self.uid}")
+		print(f"Yostar Account: {data['Account']}")
+		print(f"Yostar Token: {data['Token']}")
+		print(f"Yostar UID: {data['UID']}")
+		return data
 
 class U8SDKAPI:
 	# Full credit to https://github.com/Tao0Lu/Arknights_Checkin for the key
@@ -156,10 +178,19 @@ class U8SDKAPI:
 			encoded += f"&{key}={value}"
 		return hmac.digest(U8SDKAPI.HAMC_KEY, encoded[1:].encode("utf-8"), "sha1").hex()
 
-	def login(self, accessToken, uid, deviceId, deviceId2="", deviceId3=""):
-		extensionData = {"uid":str(uid),"token":accessToken}
-		postData = {"appId":str(self.appId),"channelId":str(self.channelId),"deviceId":deviceId,"deviceId2":deviceId2,"deviceId3":deviceId3,
-					"extension":json.dumps(extensionData),"platform":self.platformId,"subChannel":str(self.subChannel),"worldId":str(self.worldId)}
+	def login(self, accessToken, uid, oldUid, deviceId, deviceId2="", deviceId3=""):
+		extensionData = {"type":1,"uid":uid,"old_uid":str(oldUid),"token":accessToken}
+		postData = {
+			"appId":str(self.appId),
+			"channelId":str(self.channelId),
+			"extension":minJson(extensionData),
+			"worldId":str(self.worldId),
+			"platform":self.platformId,
+			"subChannel":str(self.subChannel),
+			"deviceId":deviceId,
+			"deviceId2":deviceId2,
+			"deviceId3":deviceId3
+		}
 		postData["sign"] = self._sign(postData)
 		resp = self.session.post(self.baseURL+"/user/v1/getToken",json=postData)
 		if resp.status_code != 200:
@@ -187,7 +218,14 @@ class ArknightsAPI:
 	SUB_CHANNEL = 3
 	WORLD_ID = 3
 
-	def __init__(self, userAgent):
+	YOSTAR_SDK_PID = "US-ARKNIGHTS"
+	YOSTAR_SDK_LANGUAGE = "en"
+	# 1000112 is for 28.4.01
+	# Idealy scrape from something like apk-pure or use the playstore api
+	# Don't know if being wrong affects the ability to log in
+	PACKAGE_VERSIONCODE = "1000112"
+
+	def __init__(self, deviceId=None, userAgent="Dalvik/2.1.0 (Linux; U; Android 7.1.2; SM-G965N Build/QP1A.190711.020)"):
 		self.session = requests.Session()
 		self.session.proxies = GLOBAL_PROXIES
 		self.session.verify = GLOBAL_SSL_VERIFY
@@ -196,13 +234,26 @@ class ArknightsAPI:
 		self.session.headers["Accept-Encoding"] = "gzip"
 		self._fetchNetworkConfig()
 		self._fetchABVersion()
-		self.airiSDK = AiriSDKAPI(userAgent, ArknightsAPI.PASSPORT_BASE, ArknightsAPI.PLATFORM.lower(), ArknightsAPI.CHANNEL)
+		self.deviceId = deviceId if deviceId is not None else self.generateDeviceId()
+		print(f"DeviceId: {self.deviceId}")
+		self.airiSDK = AiriSDKAPI(deviceId, ArknightsAPI.PLATFORM.lower(), ArknightsAPI.CHANNEL, ArknightsAPI.YOSTAR_SDK_PID,
+							ArknightsAPI.YOSTAR_SDK_LANGUAGE, ArknightsAPI.PACKAGE_VERSIONCODE)
 		self.u8SDK = U8SDKAPI(userAgent, ArknightsAPI.UNITY_VERSION, self.u8sdk_base, ArknightsAPI.APP_ID,
 							ArknightsAPI.CHANNEL_ID, ArknightsAPI.SUB_CHANNEL, ArknightsAPI.WORLD_ID, ArknightsAPI.PLATFORM_ID)
 		self.seqnum = 0
 		self.playerData = {}
 		self.secret = None
 		self.uid = None
+
+	def getDeviceId(self):
+		return self.deviceId
+
+	def getUserAgent(self):
+		return self.session.headers["User-Agent"]
+
+	@staticmethod
+	def generateDeviceId():
+		return str(uuid.uuid4())
 
 	def _getHotURL(self, path, version=None):
 		if version is None:
@@ -310,21 +361,21 @@ class ArknightsAPI:
 		print(f"GS Secret: {self.secret}")
 		print(f"GS UID: {self.uid}")
 
-	def login(self, uid, token, deviceId, deviceId2="", deviceId3=""):
+	def login(self, uid, token, account, deviceId2="", deviceId3=""):
 		# Do AiriSDK Login first to get the access token
-		self.airiSDK.login(uid, deviceId, token)
+		self.airiSDK.login(uid, token, account)
 		# Then we can get the U8 token
-		self.u8SDK.login(self.airiSDK.accessToken, uid, deviceId, deviceId2, deviceId3)
+		self.u8SDK.login(self.airiSDK.token, self.airiSDK.uid, self.airiSDK.oldUid, self.deviceId, deviceId2, deviceId3)
 		# Finally we can login to the Game Server
-		self._loginGS(self.u8SDK.token, self.u8SDK.uid, deviceId, deviceId2, deviceId3)
+		self._loginGS(self.u8SDK.token, self.u8SDK.uid, self.deviceId, deviceId2, deviceId3)
 
 	def yostarRequestLogin(self, email):
 		self.airiSDK.yostarAuthRequest(email)
 
-	def yostarCreateLogin(self, email, code, deviceId, createNew=False):
-		self.airiSDK.yostarAuth(email, code)
-		self.airiSDK.yostarCreateLogin(self.airiSDK.yostarToken, deviceId, self.airiSDK.yostarUid, email, createNew)
-		return {"uid":self.airiSDK.uid,"deviceId":deviceId,"token":self.airiSDK.token}
+	def yostarCreateLogin(self, email, code):
+		data = self.airiSDK.yostarGetAuth(email, code)
+		data["deviceId"] = self.deviceId
+		return data
 
 	# https://stackoverflow.com/questions/3232943/update-value-of-a-nested-dictionary-of-varying-depth
 	def _updateData(self, srcData, updateData):
@@ -578,6 +629,18 @@ class ArknightsAPI:
 	# Annihilation PRTS Total Proxy
 	def doBattleSweep(self, instanceId, itemId, stageId):
 		data = self._doGSPost("/campaignV2/battleSweep",{"instId":instanceId,"itemId":itemId,"stageId":stageId})
+		self._handleDeltaData(data)
+		return data
+
+	# Batch rotate
+	def doBatchRotation(self):
+		data = self._doGSPost("/building/batchChangeWorkChar")
+		self._handleDeltaData(data)
+		return data
+
+	# Batch rest for rotations
+	def doBatchRest(self):
+		data = self._doGSPost("/building/batchRestChar")
 		self._handleDeltaData(data)
 		return data
 
